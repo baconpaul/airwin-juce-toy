@@ -27,6 +27,8 @@ juce_add_plugin(airwindow-juce-toy
     NEEDS_MIDI_INPUT FALSE
     NEEDS_MIDI_OUTPUT FALSE
     IS_MIDI_EFFECT FALSE
+
+    COPY_PLUGIN_AFTER_BUILD TRUE
     
     FORMATS AU VST3 Standalone ${EXTRA_FORMATS}
 )
@@ -41,6 +43,7 @@ target_include_directories(airwindow-juce-toy
 target_sources(airwindow-juce-toy PRIVATE
   src/PluginEditor.cpp
   src/PluginProcessor.cpp
+  src/TimeSeriesDisplay.cpp
 )
 
 target_compile_definitions(airwindow-juce-toy PUBLIC

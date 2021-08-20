@@ -12,49 +12,61 @@
 
 #include <JuceHeader.h>
 #include <set>
+#include "LockFreeQueue.h"
 
 class AirWinJuceToyAudioProcessor;
 
-template <typename T, int qSize = 4096> class AirWinJuceToyUIQueue
-{
-  public:
-    AirWinJuceToyUIQueue() : af(qSize) {}
-    bool push(const T &ad)
-    {
-        auto ret = false;
-        int start1, size1, start2, size2;
-        af.prepareToWrite(1, start1, size1, start2, size2);
-        if (size1 > 0)
-        {
-            dq[start1] = ad;
-            ret = true;
-        }
-        af.finishedWrite(size1 + size2);
-        return ret;
-    }
-    bool pop(T &ad)
-    {
-        bool ret = false;
-        int start1, size1, start2, size2;
-        af.prepareToRead(1, start1, size1, start2, size2);
-        if (size1 > 0)
-        {
-            ad = dq[start1];
-            ret = true;
-        }
-        af.finishedRead(size1 + size2);
-        return ret;
-    }
-    juce::AbstractFifo af;
-    T dq[qSize];
-};
-
-class AirWinJuceToyAudioProcessor : public juce::AudioProcessor
+class AirWinJuceToyAudioProcessor : public juce::AudioProcessor,
+                                    public juce::AudioProcessorParameter::Listener
 {
   public:
     //==============================================================================
     AirWinJuceToyAudioProcessor();
     ~AirWinJuceToyAudioProcessor();
+
+    /*
+     * I use a simple linear data structure on both the UI and Audio side for my
+     * 3 parameters, indexed by this enum
+     */
+    enum Parameters
+    {
+        GAIN = 0,
+        CUTOFF,
+        RESONANCE
+    };
+    static constexpr int n_params = RESONANCE + 1;
+
+    std::array<juce::AudioParameterFloat *, n_params> params;
+
+    struct UIToAudioMessage
+    {
+        enum What
+        {
+            NEW_VALUE,
+            BEGIN_EDIT,
+            END_EDIT
+        } what{NEW_VALUE};
+        Parameters which;
+        float newValue{0.f};
+    };
+    struct AudioToUIMessage
+    {
+        enum What
+        {
+            NEW_VALUE,
+            RMS
+        } what{NEW_VALUE};
+        Parameters which;
+        float newValue{0.f};
+    };
+    LockFreeQueue<UIToAudioMessage> uiToAudio;
+    LockFreeQueue<AudioToUIMessage> audioToUI;
+
+    float rmsIn{0.f};
+    int nrms{0};
+
+    void parameterValueChanged(int parameterIndex, float newValue) override;
+    void parameterGestureChanged(int parameterIndex, bool starting) override;
 
     //==============================================================================
     void prepareToPlay(double sampleRate, int samplesPerBlock) override;
@@ -66,33 +78,30 @@ class AirWinJuceToyAudioProcessor : public juce::AudioProcessor
 
     //==============================================================================
     juce::AudioProcessorEditor *createEditor() override;
-    bool hasEditor() const override;
+    bool hasEditor() const override { return true; }
 
     //==============================================================================
     const juce::String getName() const override;
 
-    bool acceptsMidi() const override;
-    bool producesMidi() const override;
-    bool isMidiEffect() const override;
-    double getTailLengthSeconds() const override;
+    bool acceptsMidi() const override { return false; }
+    bool producesMidi() const override { return false; }
+    bool isMidiEffect() const override { return false; }
+    double getTailLengthSeconds() const override { return 0.0; }
 
     //==============================================================================
-    int getNumPrograms() override;
-    int getCurrentProgram() override;
-    void setCurrentProgram(int index) override;
-    const juce::String getProgramName(int index) override;
-    void changeProgramName(int index, const juce::String &newName) override;
+    int getNumPrograms() override { return 1; }
+    int getCurrentProgram() override { return 0; }
+    void setCurrentProgram(int index) override {}
+    const juce::String getProgramName(int index) override { return {}; }
+    void changeProgramName(int index, const juce::String &newName) override {}
 
     //==============================================================================
     void getStateInformation(juce::MemoryBlock &destData) override;
     void setStateInformation(const void *data, int sizeInBytes) override;
 
-    void setParameterFromUI(int id, float f) { uiMessageQ.push(std::make_pair(id, f)); }
-    AirWinJuceToyUIQueue<std::pair<int, float>> uiMessageQ;
-
-    std::atomic<bool> newValues;
-
-    std::vector<juce::RangedAudioParameter *> params;
+    float priorCutoff{-1.0};
+    float b[3], a[3];
+    float yN[3][2], xN[3][2];
 
   private:
     //==============================================================================

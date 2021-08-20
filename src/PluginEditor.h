@@ -16,6 +16,9 @@
 //==============================================================================
 /**
  */
+
+struct TimeSeriesDisplay;
+
 class AirWinJuceToyAudioProcessorEditor : public juce::AudioProcessorEditor, juce::Slider::Listener
 {
   public:
@@ -26,7 +29,14 @@ class AirWinJuceToyAudioProcessorEditor : public juce::AudioProcessorEditor, juc
     void paint(juce::Graphics &) override;
     void resized() override;
 
+    std::array<std::unique_ptr<juce::Slider>, AirWinJuceToyAudioProcessor::n_params> sliders;
+    std::array<std::unique_ptr<juce::Label>, AirWinJuceToyAudioProcessor::n_params> labels;
+    std::unique_ptr<TimeSeriesDisplay> tsdisplay;
+
     void sliderValueChanged(juce::Slider *) override;
+    void sliderDragStarted(juce::Slider *) override;
+    void sliderDragEnded(juce::Slider *) override;
+    void sliderDragInternal(juce::Slider *, bool started);
 
     struct IdleTimer : juce::Timer
     {
