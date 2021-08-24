@@ -30,7 +30,7 @@ AirWinJuceToyAudioProcessor::AirWinJuceToyAudioProcessor()
     addParameter(params[CUTOFF] =
                      new juce::AudioParameterFloat("lpf-cutoff", "LPF Cutoff", {1.f, 127.f}, 69));
     addParameter(params[RESONANCE] = new juce::AudioParameterFloat("lpf-resonance", "LPF Resonance",
-                                                                   {0.f, 1.f}, 69));
+                                                                   {0.f, 1.f}, 1));
 
     for (int i = 0; i < n_params; ++i)
     {
@@ -61,14 +61,18 @@ void AirWinJuceToyAudioProcessor::releaseResources()
 
 bool AirWinJuceToyAudioProcessor::isBusesLayoutSupported(const BusesLayout &layouts) const
 {
+    if (layouts.getMainOutputChannelSet().isDisabled() ||
+        layouts.getMainInputChannelSet().isDisabled())
+        return true;
+
     // This is the place where you check if the layout is supported.
     // In this template code we only support mono or stereo.
     if (layouts.getMainOutputChannelSet() != AudioChannelSet::mono() &&
         layouts.getMainOutputChannelSet() != AudioChannelSet::stereo())
         return false;
 
-    // This checks if the input layout matches the output layout
-    if (layouts.getMainOutputChannelSet() != layouts.getMainInputChannelSet())
+    if (layouts.getMainInputChannelSet() != AudioChannelSet::mono() &&
+        layouts.getMainInputChannelSet() != AudioChannelSet::stereo())
         return false;
 
     return true;
@@ -99,6 +103,10 @@ void AirWinJuceToyAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiB
         }
     }
 
+    // Need an input and an output otherwise do nothing
+    if (!(getBus(false, 0)->isEnabled() && getBus(true, 0)->isEnabled()))
+        return;
+
     auto mainOutput = getBusBuffer(buffer, false, 0);
     auto mainInput = getBusBuffer(buffer, true, 0);
 
@@ -124,9 +132,15 @@ void AirWinJuceToyAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiB
     for (int i = 0; i < buffer.getNumSamples(); ++i)
     {
         auto outL = mainOutput.getWritePointer(0, i);
-        auto outR = mainOutput.getWritePointer(1, i);
+        auto outR = outL;
+        if (mainOutput.getNumChannels() >= 2)
+            outR = mainOutput.getWritePointer(1, i);
+
         auto inL = mainInput.getReadPointer(0, i);
-        auto inR = mainInput.getReadPointer(1, i);
+        auto inR = inL;
+
+        if (mainInput.getNumChannels() >= 2)
+            inR = mainInput.getReadPointer(1, i);
 
         for (int c = 0; c < 2; ++c)
         {
